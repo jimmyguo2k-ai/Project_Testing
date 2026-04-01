@@ -1,0 +1,31 @@
+{
+  "name": "story-generator",
+  "version": "0.1.0",
+  "description": "Three-layer AI story generator",
+  "main": "server/index.js",
+  "scripts": {
+    "dev:server": "node server/index.js",
+    "dev:client": "cd client && npx vite",
+    "build": "cd client && npx vite build",
+    "start": "npm run build && node server/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jimmyguo2k-ai/Project_Testing.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/jimmyguo2k-ai/Project_Testing/issues"
+  },
+  "homepage": "https://github.com/jimmyguo2k-ai/Project_Testing#readme",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.81.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "uuid": "^13.0.0"
+  }
+}
