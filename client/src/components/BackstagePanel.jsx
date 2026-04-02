@@ -173,12 +173,8 @@ function DirectorTab({ directives }) {
           <div key={d.turnNumber} style={styles.card}>
             <div style={styles.cardHeader}>
               <strong>Turn {d.turnNumber}</strong>
-              <span style={styles.badge}>
-                {d.directive?.pacingInstruction?.pacingAction || '?'}
-              </span>
-              <span style={styles.badge}>
-                T: {d.directive?.pacingInstruction?.currentTension?.toFixed(2)}
-              </span>
+              <span style={styles.badge}>{d.directive?.pacingInstruction?.pacingAction || '?'}</span>
+              <span style={styles.badge}>T: {d.directive?.pacingInstruction?.currentTension?.toFixed(2)}</span>
             </div>
             {d.userInput && <Field label="User Input" value={d.userInput} />}
             <Field label="Scene" value={`${d.directive?.sceneControl?.location || '?'} — ${d.directive?.sceneControl?.mood || '?'}`} />
@@ -189,6 +185,7 @@ function DirectorTab({ directives }) {
             {d.directive?.narrativeDirectives?.map((nd, i) => (
               <Field key={i} label={nd.type} value={nd.instruction || nd.description} />
             ))}
+            {d.thinking?.director && <ThinkingBlock label="导演思考链" thinking={d.thinking.director} />}
           </div>
         ))}
       </Section>
@@ -210,6 +207,7 @@ function ActorTab({ turns }) {
           </div>
           <Field label="Characters Present" value={t.output?.metadata?.charactersPresent?.join(', ')} />
           <Field label="Hook Mode" value={t.output?.interactionHook?.mode} />
+          {t.thinking?.actor && <ThinkingBlock label="演员思考链" thinking={t.thinking.actor} />}
           {t.output?.interactionHook?.prompt && (
             <Field label="Hook" value={t.output.interactionHook.prompt} />
           )}
@@ -310,6 +308,21 @@ function Section({ title, children }) {
   );
 }
 
+function ThinkingBlock({ label, thinking }) {
+  const [open, setOpen] = useState(false);
+  if (!thinking) return null;
+  return (
+    <div style={styles.thinkingBlock}>
+      <button style={styles.thinkingToggle} onClick={() => setOpen(o => !o)}>
+        🧠 {label} {open ? '▲' : '▼'}
+      </button>
+      {open && (
+        <pre style={styles.thinkingText}>{thinking}</pre>
+      )}
+    </div>
+  );
+}
+
 function Field({ label, value }) {
   if (!value) return null;
   return (
@@ -383,5 +396,19 @@ const styles = {
   segments: { display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 },
   segBadge: {
     padding: '2px 8px', borderRadius: 4, fontSize: 11, color: 'var(--text-secondary)',
+  },
+  thinkingBlock: {
+    marginTop: 10, borderTop: '1px solid var(--border)', paddingTop: 8,
+  },
+  thinkingToggle: {
+    background: 'none', border: '1px solid var(--border)', borderRadius: 4,
+    color: 'var(--accent)', fontSize: 11, padding: '3px 10px', cursor: 'pointer',
+    width: '100%', textAlign: 'left',
+  },
+  thinkingText: {
+    marginTop: 8, padding: 10, background: 'var(--bg-primary)', borderRadius: 4,
+    fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word', maxHeight: 300, overflowY: 'auto',
+    fontFamily: 'var(--font-mono)',
   },
 };

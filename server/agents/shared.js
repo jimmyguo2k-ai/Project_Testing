@@ -10,29 +10,19 @@ function extractJSON(text) {
   // Strategy 1: Try parsing the whole text as JSON directly
   try {
     return JSON.parse(text.trim());
-  } catch (e) {
-    // continue
-  }
+  } catch (e) { /* continue */ }
 
-  // Strategy 2: Extract from markdown code blocks (```json ... ``` or ``` ... ```)
+  // Strategy 2: Extract from markdown code blocks
   const codeBlockMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
   if (codeBlockMatch) {
-    try {
-      return JSON.parse(codeBlockMatch[1].trim());
-    } catch (e) {
-      // continue
-    }
+    try { return JSON.parse(codeBlockMatch[1].trim()); } catch (e) { /* continue */ }
   }
 
   // Strategy 3: Find the first { and last } and try parsing that
   const firstBrace = text.indexOf('{');
   const lastBrace = text.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace > firstBrace) {
-    try {
-      return JSON.parse(text.slice(firstBrace, lastBrace + 1));
-    } catch (e) {
-      // continue
-    }
+    try { return JSON.parse(text.slice(firstBrace, lastBrace + 1)); } catch (e) { /* continue */ }
   }
 
   return null;
@@ -40,13 +30,14 @@ function extractJSON(text) {
 
 /**
  * Call Claude API with structured JSON output.
- * Returns { result, usage, rawText } where usage tracks input/output tokens.
+ * Optionally enables extended thinking.
+ * Returns { result, usage, thinking, rawText }
  */
-async function callAgent({ model, systemPrompt, messages, maxTokens, agentName }) {
+async function callAgent({ model, systemPrompt, messages, maxTokens, agentName, thinkingBudget }) {
   console.log(`\n[${'='.repeat(50)}]`);
-  console.log(`[${agentName || 'agent'}] Calling ${model} (max_tokens: ${maxTokens})...`);
+  console.log(`[${agentName || 'agent'}] Calling ${model} (max_tokens: ${maxTokens}${thinkingBudget ? `, thinking: ${thinkingBudget}` : ''})...`);
 
-  const response = await client.messages.create({
+  const requestParams = {
     model,
     max_tokens: maxTokens,
     system: [
@@ -57,34 +48,47 @@ async function callAgent({ model, systemPrompt, messages, maxTokens, agentName }
       },
     ],
     messages,
-  });
+  };
 
-  const text = response.content
-    .filter((block) => block.type === 'text')
-    .map((block) => block.text)
-    .join('');
+  // Enable extended thinking if budget specified
+  if (thinkingBudget) {
+    requestParams.thinking = { type: 'enabled', budget_tokens: thinkingBudget };
+  }
+
+  const response = await client.messages.create(requestParams);
+
+  // Collect text and thinking blocks separately
+  let text = '';
+  const thinkingBlocks = [];
+
+  for (const block of response.content) {
+    if (block.type === 'text') {
+      text += block.text;
+    } else if (block.type === 'thinking') {
+      thinkingBlocks.push(block.thinking);
+    }
+  }
 
   const usage = {
     input: response.usage?.input_tokens || 0,
     output: response.usage?.output_tokens || 0,
   };
 
-  console.log(`[${agentName || 'agent'}] Response received. Tokens: ${usage.input} in / ${usage.output} out`);
+  console.log(`[${agentName || 'agent'}] Tokens: ${usage.input} in / ${usage.output} out${thinkingBlocks.length ? ` | thinking blocks: ${thinkingBlocks.length}` : ''}`);
   console.log(`[${agentName || 'agent'}] Raw response (first 300 chars): ${text.substring(0, 300)}...`);
 
-  // Try to parse as JSON
   const result = extractJSON(text);
 
   if (result) {
     console.log(`[${agentName || 'agent'}] JSON parsed successfully.`);
   } else {
-    console.log(`[${agentName || 'agent'}] WARNING: JSON parse failed! Full response:`);
-    console.log(text.substring(0, 1000));
+    console.log(`[${agentName || 'agent'}] WARNING: JSON parse failed! Full response:\n${text.substring(0, 800)}`);
   }
 
   return {
     result: result || { _raw: text, _parseError: 'Failed to extract JSON from response' },
     usage,
+    thinking: thinkingBlocks.join('\n\n---\n\n'),
     rawText: text,
   };
 }
@@ -102,7 +106,6 @@ function trackUsage(state, agentName, usage, turnNumber) {
   state.tokenUsage.total.input += usage.input;
   state.tokenUsage.total.output += usage.output;
 
-  // Add to per-turn tracking
   let turnEntry = state.tokenUsage.byTurn.find((t) => t.turnNumber === turnNumber);
   if (!turnEntry) {
     turnEntry = { turnNumber, totalInput: 0, totalOutput: 0, timestamp: new Date().toISOString() };
@@ -113,4 +116,4 @@ function trackUsage(state, agentName, usage, turnNumber) {
   turnEntry.totalOutput += usage.output;
 }
 
-module.exports = { callAgent, trackUsage };
+module.exports = { callAgent, trackUsage, extractJSON };

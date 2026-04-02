@@ -136,12 +136,13 @@ async function run(context) {
     userMessage += `\nNo user input this turn — auto-advance the story. Choose the most dramatically compelling next beat based on pacing needs and character motivations.\n`;
   }
 
-  const { result, usage } = await callAgent({
+  const { result, usage, thinking } = await callAgent({
     model: config.models.director,
     systemPrompt: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMessage }],
     maxTokens: config.maxTokens.director,
     agentName: 'director',
+    // Note: Haiku does not support extended thinking; thinking will be undefined
   });
 
   // Ensure turnNumber is set
@@ -150,7 +151,7 @@ async function run(context) {
     result.timestamp = new Date().toISOString();
   }
 
-  return { result, usage };
+  return { result, usage, thinking };
 }
 
 module.exports = { run };

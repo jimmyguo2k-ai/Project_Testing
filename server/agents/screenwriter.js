@@ -103,12 +103,13 @@ async function run(state) {
     }
   }
 
-  const { result, usage, rawText } = await callAgent({
+  const { result, usage, thinking } = await callAgent({
     model: config.models.screenwriter,
     systemPrompt: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMessage }],
     maxTokens: config.maxTokens.screenwriter,
     agentName: 'screenwriter',
+    thinkingBudget: 8000,
   });
 
   // Stamp metadata
@@ -125,7 +126,7 @@ async function run(state) {
     };
   }
 
-  return { result, usage };
+  return { result, usage, thinking };
 }
 
 module.exports = { run };

@@ -1,8 +1,8 @@
 const config = {
   // Model IDs for each agent layer
   models: {
-    screenwriter: 'claude-opus-4-6',
-    director: 'claude-sonnet-4-6',
+    screenwriter: 'claude-sonnet-4-6',
+    director: 'claude-haiku-4-5-20251001',
     actor: 'claude-sonnet-4-6',
     summarizer: 'claude-haiku-4-5-20251001',
   },
@@ -10,8 +10,8 @@ const config = {
   // Token limits per agent
   maxTokens: {
     screenwriter: 16384,
-    director: 2048,
-    actor: 4096,
+    director: 4096,   // increased: Haiku was truncating rich directives
+    actor: 8192,      // increased: Sonnet prose was getting cut off
     summarizer: 512,
   },
 

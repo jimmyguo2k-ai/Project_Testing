@@ -160,7 +160,7 @@ export function advanceStory(sessionId, callbacks) {
   return () => controller.abort();
 }
 
-function processSSE(response, { onStatus, onScene, onDone, onError }) {
+function processSSE(response, { onStatus, onChunk, onScene, onDone, onError }) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -181,6 +181,7 @@ function processSSE(response, { onStatus, onScene, onDone, onError }) {
           try {
             const data = JSON.parse(line.slice(6));
             if (eventType === 'status') onStatus?.(data);
+            else if (eventType === 'chunk') onChunk?.(data);
             else if (eventType === 'scene') onScene?.(data);
             else if (eventType === 'done') onDone?.(data);
             else if (eventType === 'error') onError?.(data);

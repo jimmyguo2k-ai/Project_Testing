@@ -112,14 +112,125 @@ async function run(context) {
     userMessage += `- Must avoid: ${directive.boundaries.mustAvoid.join(', ')}\n`;
   }
 
-  const { result, usage } = await callAgent({
+  const { result, usage, thinking } = await callAgent({
     model: config.models.actor,
     systemPrompt: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMessage }],
     maxTokens: config.maxTokens.actor,
+    agentName: 'actor',
+    thinkingBudget: 4000,
   });
 
-  return { result, usage };
+  return { result, usage, thinking };
 }
 
-module.exports = { run };
+/**
+ * Streaming version — yields text chunks as they arrive, then returns full result.
+ * Use this for real-time display in the UI.
+ */
+async function* runStream(context) {
+  const Anthropic = require('@anthropic-ai/sdk');
+  const client = new Anthropic();
+
+  const { directive, bible, previousOutput, userInput } = context;
+
+  let userMessage = `## Director's Directive\n\n`;
+  userMessage += JSON.stringify(directive, null, 2);
+  userMessage += `\n\n## Aesthetic Direction\n\n`;
+  userMessage += `Prose style: ${bible.aestheticDirection.proseStyle}\n`;
+  userMessage += `Dialogue style: ${bible.aestheticDirection.dialogueStyle}\n`;
+  userMessage += `Narrative POV: ${bible.aestheticDirection.narrativePOV || 'second person present tense'}\n`;
+
+  const presentCharIds = new Set();
+  if (directive.narrativeDirectives) {
+    for (const nd of directive.narrativeDirectives) {
+      if (nd.characterId) presentCharIds.add(nd.characterId);
+    }
+  }
+  const protagonist = bible.characters.find((c) => c.role === 'protagonist');
+  if (protagonist) presentCharIds.add(protagonist.id);
+
+  const presentChars = bible.characters.filter((c) => presentCharIds.has(c.id));
+  if (presentChars.length > 0) {
+    userMessage += `\n## Characters in This Scene\n\n`;
+    for (const c of presentChars) {
+      userMessage += `**${c.name}** (${c.role})\n- Voice: ${c.voice}\n- Motivation: ${c.motivation}\n- Arc: ${c.arc}\n\n`;
+    }
+  }
+
+  if (previousOutput && previousOutput.prose) {
+    const lastParagraphs = previousOutput.prose.split('\n').slice(-4).join('\n');
+    userMessage += `\n## Previous Scene (last portion)\n\n${lastParagraphs}\n`;
+  }
+
+  if (userInput) {
+    userMessage += `\n## User's Action\n\nThe protagonist does: "${userInput}"\nIntegrate naturally.\n`;
+  } else {
+    userMessage += `\n## No User Input\n\nAdvance naturally based on character and situation.\n`;
+  }
+
+  userMessage += `\n## Requirements\n`;
+  userMessage += `- Word count: ${directive.boundaries?.targetWordCount?.min || 800}-${directive.boundaries?.targetWordCount?.max || 1500} words\n`;
+  userMessage += `- Hook mode: ${directive.hookMode || 'explicit'}\n`;
+
+  console.log(`\n[actor] Streaming response from ${config.models.actor} (with thinking)...`);
+
+  let fullText = '';
+  let thinkingText = '';
+  const stream = client.messages.stream({
+    model: config.models.actor,
+    max_tokens: config.maxTokens.actor,
+    thinking: { type: 'enabled', budget_tokens: 4000 },
+    system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+    messages: [{ role: 'user', content: userMessage }],
+  });
+
+  for await (const chunk of stream) {
+    if (chunk.type === 'content_block_delta') {
+      if (chunk.delta?.type === 'text_delta') {
+        fullText += chunk.delta.text;
+        yield { type: 'chunk', text: chunk.delta.text };
+      } else if (chunk.delta?.type === 'thinking_delta') {
+        thinkingText += chunk.delta.thinking;
+        yield { type: 'thinking_chunk', text: chunk.delta.thinking };
+      }
+    }
+  }
+
+  const finalMessage = await stream.finalMessage();
+  const usage = {
+    input: finalMessage.usage?.input_tokens || 0,
+    output: finalMessage.usage?.output_tokens || 0,
+  };
+
+  console.log(`[actor] Stream complete. Tokens: ${usage.input} in / ${usage.output} out`);
+
+  // Parse the full JSON result
+  // Try parsing the accumulated text
+  let result;
+  try {
+    result = JSON.parse(fullText.trim());
+  } catch (e) {
+    // Try extracting from code block
+    const match = fullText.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+    if (match) {
+      try { result = JSON.parse(match[1].trim()); } catch (e2) { /* */ }
+    }
+    if (!result) {
+      const first = fullText.indexOf('{');
+      const last = fullText.lastIndexOf('}');
+      if (first !== -1 && last > first) {
+        try { result = JSON.parse(fullText.slice(first, last + 1)); } catch (e2) { /* */ }
+      }
+    }
+  }
+
+  yield {
+    type: 'complete',
+    result: result || { _raw: fullText, _parseError: 'Failed to parse actor JSON' },
+    usage,
+    thinking: thinkingText,
+  };
+}
+
+module.exports = { run, runStream };

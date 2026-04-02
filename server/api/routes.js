@@ -69,7 +69,13 @@ async function streamTurn(res, sessionId, userInput) {
 
   try {
     for await (const event of runTurn(sessionId, userInput)) {
-      if (event.phase === 'complete') {
+      if (event.phase === 'chunk') {
+        res.write(`event: chunk\ndata: ${JSON.stringify({ text: event.text })}\n\n`);
+      } else if (event.phase === 'thinking_chunk') {
+        res.write(`event: thinking_chunk\ndata: ${JSON.stringify({ text: event.text })}\n\n`);
+      } else if (event.phase === 'thinking') {
+        res.write(`event: thinking\ndata: ${JSON.stringify({ agent: event.agent, thinking: event.thinking })}\n\n`);
+      } else if (event.phase === 'complete') {
         res.write(`event: scene\ndata: ${JSON.stringify(event.scene)}\n\n`);
         res.write(
           `event: done\ndata: ${JSON.stringify({ turnNumber: event.turnNumber, tokenUsage: event.tokenUsage })}\n\n`
